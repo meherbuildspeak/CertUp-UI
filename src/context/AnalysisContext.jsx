@@ -8,30 +8,34 @@ export function AnalysisProvider({ children }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    const fetchLatest = async () => {
-      try {
-        const data = await analysisService.getLatestAnalysis()
+  const fetchLatest = async () => {
+    try {
+      const data = await analysisService.getLatestAnalysis()
+      if (data) {
         setLatestAnalysis(data)
-      } catch (err) {
-        console.error('Failed to load latest analysis:', err)
       }
+    } catch (err) {
+      console.error('Failed to load latest analysis:', err)
     }
+  }
+
+  useEffect(() => {
     fetchLatest()
   }, [])
 
-  const submitAnalysis = async (formData) => {
+  const submitAnalysis = async (payload) => {
     setIsSubmitting(true)
     setError(null)
     try {
-      const response = await analysisService.submitAnalysisRequest(formData)
+      const response = await analysisService.submitAnalysisRequest(payload)
       if (response && response.data) {
         setLatestAnalysis(response.data)
       }
       setIsSubmitting(false)
       return response
     } catch (err) {
-      setError(err.message || 'Failed to submit policy analysis request')
+      const errorMsg = err.message || 'Failed to submit policy analysis request'
+      setError(errorMsg)
       setIsSubmitting(false)
       throw err
     }
@@ -43,10 +47,13 @@ export function AnalysisProvider({ children }) {
         latestAnalysis,
         isSubmitting,
         error,
+        setError,
         submitAnalysis,
+        refreshLatestAnalysis: fetchLatest,
       }}
     >
       {children}
     </AnalysisContext.Provider>
   )
 }
+

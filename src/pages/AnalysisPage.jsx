@@ -9,12 +9,11 @@ import { useAnalysis } from '../hooks/useAnalysis'
 
 export default function AnalysisPage() {
   const navigate = useNavigate()
-  const { submitAnalysis, isSubmitting } = useAnalysis()
+  const { submitAnalysis, isSubmitting, error: apiError, setError: setApiError } = useAnalysis()
 
   const [companyName, setCompanyName] = useState('')
   const [companySize, setCompanySize] = useState('')
   const [industry, setIndustry] = useState('')
-  const [isoGoal, setIsoGoal] = useState('')
   const [files, setFiles] = useState([])
 
   const [formErrors, setFormErrors] = useState({})
@@ -25,23 +24,28 @@ export default function AnalysisPage() {
     if (!companyName.trim()) {
       errors.companyName = 'Company name is required.'
     }
+    if (files.length === 0) {
+      errors.files = 'Please upload a PDF policy document to analyze.'
+    }
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (setApiError) setApiError(null)
     if (!validate()) return
 
     try {
       const result = await submitAnalysis({
+        file: files[0],
         companyName,
         companySize,
         industry,
-        isoGoal: 'ISO 27001',
-        files,
       })
       setSubmittedResult(result?.data || { companyName })
+      // Automatically redirect to dashboard
+      navigate('/dashboard')
     } catch (err) {
       console.error('Submission failed:', err)
     }
@@ -75,17 +79,37 @@ export default function AnalysisPage() {
         </h1>
 
         <p className="text-muted text-base sm:text-lg leading-relaxed max-w-2xl mb-8">
-          Share your company details and policy documents. Our AI engine will analyze them against ISO standards and deliver a comprehensive gap analysis.
+          Upload your policy document. Our AI engine will parse the content and analyze it against ISO 27001 requirements.
         </p>
-
-
       </section>
 
       {/* Main Analysis Form Card */}
       <main className="max-w-2xl mx-auto px-4 pb-20">
         <div className="bg-surface border border-border rounded-xl p-6 sm:p-8 shadow-2xl">
           
-          {submittedResult ? (
+          {apiError && (
+            <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-sm font-medium">
+              <span className="font-bold">Error: </span>
+              {apiError}
+            </div>
+          )}
+
+          {isSubmitting ? (
+            <div className="text-center py-12 space-y-6 animate-in fade-in duration-300">
+              <div className="w-16 h-16 rounded-full bg-accent/20 border border-accent text-accent flex items-center justify-center mx-auto shadow-lg shadow-accent/20 animate-spin">
+                <Shield className="w-8 h-8 text-accent" />
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-2xl sm:text-3xl font-bold text-white">
+                  Analyzing Your Policy...
+                </h2>
+                <p className="text-muted text-sm max-w-md mx-auto leading-relaxed">
+                  Parsing PDF text and matching against ISO 27001 control domains using local AI models. Please wait a moment.
+                </p>
+              </div>
+            </div>
+          ) : submittedResult ? (
             <div className="text-center py-12 space-y-6 animate-in fade-in duration-300">
               <div className="w-16 h-16 rounded-full bg-accent/20 border border-accent text-accent flex items-center justify-center mx-auto shadow-lg shadow-accent/20">
                 <CheckCircle2 className="w-8 h-8 text-accent" />
@@ -93,10 +117,10 @@ export default function AnalysisPage() {
 
               <div className="space-y-2">
                 <h2 className="text-2xl sm:text-3xl font-bold text-white">
-                  Analysis Request Submitted!
+                  Analysis Complete!
                 </h2>
                 <p className="text-muted text-sm max-w-md mx-auto leading-relaxed">
-                  Thank you, <span className="text-white font-semibold">{companyName}</span>. Our AI analysis engine has processed your documents and generated your customized readiness profile.
+                  Thank you, <span className="text-white font-semibold">{companyName}</span>. Your compliance profile is ready.
                 </p>
               </div>
 
@@ -116,12 +140,11 @@ export default function AnalysisPage() {
                     setCompanyName('')
                     setCompanySize('')
                     setIndustry('')
-                    setIsoGoal('')
                     setFiles([])
                   }}
                   className="w-full sm:w-auto"
                 >
-                  Submit Another Request
+                  Submit Another Policy
                 </Button>
               </div>
             </div>
@@ -160,15 +183,16 @@ export default function AnalysisPage() {
                 </div>
               </div>
 
-
-
-              {/* Section 3: Policy Documents */}
+              {/* Section 2: Policy Documents */}
               <div className="pt-4 border-t border-border/40">
                 <h2 className="text-white font-bold text-xl mb-4">
-                  Policy Documents
+                  Policy Document (PDF)
                 </h2>
 
                 <FileUploadZone files={files} onFilesChange={setFiles} />
+                {formErrors.files && (
+                  <p className="text-rose-400 text-xs mt-2 font-medium">{formErrors.files}</p>
+                )}
               </div>
 
               {/* Form Actions */}
@@ -183,7 +207,7 @@ export default function AnalysisPage() {
                 </Button>
                 
                 <p className="text-muted text-xs text-center mt-4 leading-relaxed">
-                  By submitting, you agree to our secure data handling practices. Your documents are encrypted and processed privately.
+                  By submitting, your document is processed securely against ISO reference controls.
                 </p>
               </div>
 

@@ -6,8 +6,11 @@ import {
   AlertTriangle,
   FileText,
   Download,
-  Clock,
-  ChevronRight,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  Info,
 } from 'lucide-react'
 import { useAnalysis } from '../hooks/useAnalysis'
 import { Badge } from '../components/common/Badge'
@@ -17,24 +20,34 @@ export default function DashboardPage() {
   const { latestAnalysis } = useAnalysis()
   const [filter, setFilter] = useState('ALL')
   const [isExporting, setIsExporting] = useState(false)
+  const [expandedCategory, setExpandedCategory] = useState(null)
 
-  const data = latestAnalysis?.results || {
-    overallReadiness: 78,
-    targetStandard: 'ISO 27001:2022',
-    policiesAnalyzed: 14,
-    criticalGaps: 3,
-    categories: [],
-    actionPlan: [],
-  }
+  // Parse backend data response structures
+  const dashboardData = latestAnalysis?.dashboard || latestAnalysis || {}
+  const policy = dashboardData?.policy || latestAnalysis?.upload || {}
+  const rawAnalysis = dashboardData?.analysis || latestAnalysis?.analyze || {}
+  const analysis = rawAnalysis?.analysis ? { ...rawAnalysis, ...rawAnalysis.analysis } : rawAnalysis
 
-  const categories = data.categories || []
-  const actionPlan = data.actionPlan || []
+  const companyName = latestAnalysis?.companyName || 'Organization'
+  const fileName = policy?.fileName || 'Uploaded Policy PDF'
+  const pageCount = policy?.pageCount || 1
+
+  const isRelevantDocument = analysis?.isRelevantDocument !== false
+  const documentType = analysis?.documentType || 'Unknown Document'
+
+  const overallScore = analysis?.overallScore ?? 0
+  const coveredCount = analysis?.coveredCount ?? 0
+  const partialCount = analysis?.partialCount ?? 0
+  const missingCount = analysis?.missingCount ?? 0
+  const categories = analysis?.categories || []
+  const topGaps = analysis?.topGaps || []
 
   const filteredCategories = categories.filter((cat) => {
+    const status = (cat.status || '').toLowerCase()
     if (filter === 'ALL') return true
-    if (filter === 'COVERED') return cat.status === 'Covered'
-    if (filter === 'PARTIAL') return cat.status === 'Partial'
-    if (filter === 'MISSING') return cat.status === 'Missing'
+    if (filter === 'COVERED') return status === 'covered'
+    if (filter === 'PARTIAL') return status === 'partial'
+    if (filter === 'MISSING') return status === 'missing'
     return true
   })
 
@@ -42,8 +55,12 @@ export default function DashboardPage() {
     setIsExporting(true)
     setTimeout(() => {
       setIsExporting(false)
-      alert('ISO Audit Readiness Report exported successfully (PDF format mock)!')
+      alert(`ISO Audit Readiness Report for ${fileName} exported successfully!`)
     }, 1000)
+  }
+
+  const toggleExpand = (catId) => {
+    setExpandedCategory(expandedCategory === catId ? null : catId)
   }
 
   return (
@@ -55,17 +72,20 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center gap-2 text-xs text-accent font-semibold mb-1">
               <Shield className="w-4 h-4" />
-              <span>{latestAnalysis?.companyName || 'Acme Technologies'} — ISO Compliance Dashboard</span>
+              <span>{companyName} — ISO 27001 Policy Analysis</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Audit Readiness Overview
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-3">
+              <span>{fileName}</span>
+              <span className="text-xs bg-surface border border-border px-2.5 py-1 rounded text-muted font-normal">
+                {pageCount} Page{pageCount !== 1 ? 's' : ''}
+              </span>
             </h1>
           </div>
 
           <div className="flex items-center gap-3">
             <Link to="/analysis">
               <Button variant="outline" size="sm">
-                New Analysis
+                Upload New Policy
               </Button>
             </Link>
 
@@ -82,172 +102,264 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 4 Key Stat Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          
-          {/* Card 1: Readiness Score */}
-          <div className="bg-surface border border-border rounded-xl p-5 shadow-xl relative overflow-hidden">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-muted text-xs font-semibold uppercase tracking-wider">
-                Overall Readiness
-              </span>
-              <Shield className="w-5 h-5 text-accent" />
+        {/* Non-Relevant Document Warning */}
+        {!isRelevantDocument && (
+          <div className="bg-rose-500/10 border-2 border-rose-500/40 rounded-xl p-6 shadow-xl space-y-3">
+            <div className="flex items-center gap-3 text-rose-400">
+              <AlertCircle className="w-6 h-6 flex-shrink-0" />
+              <h2 className="text-lg font-bold text-white">Document Not Relevant for ISO Policy Analysis</h2>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-3xl font-extrabold text-white">{data.overallReadiness}%</span>
-              <span className="text-emerald-400 text-xs font-semibold">On Track</span>
-            </div>
-            <div className="w-full bg-background rounded-full h-2 mt-3 overflow-hidden border border-border/40">
-              <div
-                className="bg-accent h-full rounded-full transition-all duration-500"
-                style={{ width: `${data.overallReadiness}%` }}
-              ></div>
-            </div>
+            <p className="text-rose-200 text-sm leading-relaxed">
+              The uploaded file <span className="font-semibold text-white">"{fileName}"</span> does not appear to be a valid organizational or information security policy. Detected document type: <span className="font-semibold text-rose-300">"{documentType}"</span>.
+            </p>
+            <p className="text-muted text-xs">
+              Please upload a valid Information Security Policy, Access Control Policy, Asset Management Policy, Incident Response Policy, or Risk Management Policy.
+            </p>
           </div>
+        )}
 
-          {/* Card 2: Target Framework */}
-          <div className="bg-surface border border-border rounded-xl p-5 shadow-xl">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-muted text-xs font-semibold uppercase tracking-wider">
-                Target Standard
+        {/* Stat Cards Overview */}
+        {isRelevantDocument && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            
+            {/* Card 1: Readiness Score */}
+            <div className="bg-surface border border-border rounded-xl p-5 shadow-xl relative overflow-hidden">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-muted text-xs font-semibold uppercase tracking-wider">
+                  Overall Readiness
+                </span>
+                <Shield className="w-5 h-5 text-accent" />
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-3xl font-extrabold text-white">{overallScore}%</span>
+                <span className={`text-xs font-semibold ${overallScore >= 70 ? 'text-emerald-400' : overallScore >= 40 ? 'text-amber-400' : 'text-rose-400'}`}>
+                  {overallScore >= 70 ? 'High Coverage' : overallScore >= 40 ? 'Moderate Gaps' : 'High Priority'}
+                </span>
+              </div>
+              <div className="w-full bg-background rounded-full h-2 mt-3 overflow-hidden border border-border/40">
+                <div
+                  className="bg-accent h-full rounded-full transition-all duration-500"
+                  style={{ width: `${overallScore}%` }}
+                ></div>
+              </div>
+            </div>
+
+            {/* Card 2: Covered Categories */}
+            <div className="bg-surface border border-border rounded-xl p-5 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-muted text-xs font-semibold uppercase tracking-wider">
+                  Covered Categories
+                </span>
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <span className="text-3xl font-extrabold text-white block mb-1">
+                {coveredCount}
               </span>
-              <FileText className="w-5 h-5 text-accent" />
+              <span className="text-emerald-400 text-xs font-medium">Fully Satisfied</span>
             </div>
-            <span className="text-xl font-bold text-white block mb-1">
-              {data.targetStandard}
-            </span>
-            <span className="text-muted text-xs">Mapped against 114 controls</span>
-          </div>
 
-          {/* Card 3: Policies Analyzed */}
-          <div className="bg-surface border border-border rounded-xl p-5 shadow-xl">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-muted text-xs font-semibold uppercase tracking-wider">
-                Policies Analyzed
+            {/* Card 3: Partial Categories */}
+            <div className="bg-surface border border-border rounded-xl p-5 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-muted text-xs font-semibold uppercase tracking-wider">
+                  Partial Categories
+                </span>
+                <HelpCircle className="w-5 h-5 text-amber-400" />
+              </div>
+              <span className="text-3xl font-extrabold text-white block mb-1">
+                {partialCount}
               </span>
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              <span className="text-amber-400 text-xs font-medium">Incomplete details</span>
             </div>
-            <span className="text-3xl font-extrabold text-white block mb-1">
-              {data.policiesAnalyzed}
-            </span>
-            <span className="text-emerald-400 text-xs font-medium">100% verified</span>
-          </div>
 
-          {/* Card 4: Critical Gaps */}
-          <div className="bg-surface border border-border rounded-xl p-5 shadow-xl">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-muted text-xs font-semibold uppercase tracking-wider">
-                Critical Gaps
+            {/* Card 4: Missing Categories */}
+            <div className="bg-surface border border-border rounded-xl p-5 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-muted text-xs font-semibold uppercase tracking-wider">
+                  Missing Categories
+                </span>
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+              </div>
+              <span className="text-3xl font-extrabold text-white block mb-1">
+                {missingCount}
               </span>
-              <AlertTriangle className="w-5 h-5 text-rose-400" />
+              <span className="text-rose-400 text-xs font-medium">Requires Policy Addition</span>
             </div>
-            <span className="text-3xl font-extrabold text-white block mb-1">
-              {data.criticalGaps}
-            </span>
-            <span className="text-rose-400 text-xs font-medium">Requires immediate drafting</span>
+
           </div>
+        )}
 
-        </div>
+        {/* Category Breakdown & Detailed Results */}
+        {isRelevantDocument && categories.length > 0 && (
+          <div className="bg-surface border border-border rounded-xl p-6 shadow-xl space-y-6 text-left">
+            
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/60">
+              <div>
+                <h2 className="text-xl font-bold text-white">ISO 27001 Control Category Results</h2>
+                <p className="text-muted text-xs mt-0.5">Click any category to inspect evidence, gap analysis, and recommendations</p>
+              </div>
 
-        {/* Control Domain Coverage Table / Grid */}
-        <div className="bg-surface border border-border rounded-xl p-6 shadow-xl space-y-6 text-left">
-          
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/60">
-            <div>
-              <h2 className="text-xl font-bold text-white">ISO Annex Control Domain Status</h2>
-              <p className="text-muted text-xs mt-0.5">Detailed breakdown of policy compliance across Annex control categories</p>
+              {/* Filter Buttons */}
+              <div className="flex items-center gap-2 bg-background p-1 rounded-lg border border-border/60 text-xs">
+                {['ALL', 'COVERED', 'PARTIAL', 'MISSING'].map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFilter(f)}
+                    className={`px-3 py-1.5 rounded-md font-semibold transition cursor-pointer ${
+                      filter === f
+                        ? 'bg-accent text-white shadow'
+                        : 'text-muted hover:text-white'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Filter Buttons */}
-            <div className="flex items-center gap-2 bg-background p-1 rounded-lg border border-border/60 text-xs">
-              {['ALL', 'COVERED', 'PARTIAL', 'MISSING'].map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-md font-semibold transition cursor-pointer ${
-                    filter === f
-                      ? 'bg-accent text-white shadow'
-                      : 'text-muted hover:text-white'
-                  }`}
+            {/* Category Cards List */}
+            <div className="space-y-4">
+              {filteredCategories.map((cat, idx) => {
+                const catId = cat.categoryId || idx
+                const isExpanded = expandedCategory === catId
+                const status = (cat.status || 'missing').toLowerCase()
+
+                return (
+                  <div
+                    key={catId}
+                    className="bg-background/60 border border-border/60 rounded-xl overflow-hidden transition"
+                  >
+                    <div
+                      onClick={() => toggleExpand(catId)}
+                      className="p-4 flex items-center justify-between cursor-pointer hover:bg-surface/50 transition"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-3">
+                          <span className="text-white text-base font-bold">{cat.category || cat.categoryId}</span>
+                          {cat.humanReviewRequired && (
+                            <span className="bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] px-2 py-0.5 rounded font-medium flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              <span>Human Review Flagged</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {cat.confidence !== undefined && (
+                          <span className="text-muted text-xs block">
+                            Confidence: <span className="text-white font-mono">{Math.round((cat.confidence || 0) * 100)}%</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <Badge variant={status}>
+                          {status.toUpperCase()}
+                        </Badge>
+                        {isExpanded ? (
+                          <ChevronUp className="w-5 h-5 text-muted" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5 text-muted" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Detailed Dropdown Content */}
+                    {isExpanded && (
+                      <div className="p-5 border-t border-border/40 bg-surface/40 space-y-4 text-xs">
+                        
+                        {/* Evidence List */}
+                        <div>
+                          <h4 className="font-semibold text-accent uppercase tracking-wider text-[11px] mb-2 flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Policy Evidence Found</span>
+                          </h4>
+                          {cat.evidence && cat.evidence.length > 0 ? (
+                            <ul className="list-disc list-inside space-y-1 text-white/90 bg-background/50 p-3 rounded-lg border border-border/40">
+                              {cat.evidence.map((ev, evIdx) => (
+                                <li key={evIdx} className="leading-relaxed">{ev}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-muted italic bg-background/50 p-3 rounded-lg border border-border/40">
+                              No explicit policy evidence identified in document for this category.
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Gap Description */}
+                        {cat.gap && (
+                          <div>
+                            <h4 className="font-semibold text-rose-400 uppercase tracking-wider text-[11px] mb-1.5 flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              <span>Identified Gap</span>
+                            </h4>
+                            <p className="text-rose-200 bg-rose-500/10 p-3 rounded-lg border border-rose-500/20 leading-relaxed">
+                              {cat.gap}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Recommendation */}
+                        {cat.recommendation && (
+                          <div>
+                            <h4 className="font-semibold text-emerald-400 uppercase tracking-wider text-[11px] mb-1.5 flex items-center gap-1.5">
+                              <Info className="w-3.5 h-3.5" />
+                              <span>Remediation Recommendation</span>
+                            </h4>
+                            <p className="text-emerald-200 bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20 leading-relaxed">
+                              {cat.recommendation}
+                            </p>
+                          </div>
+                        )}
+
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+          </div>
+        )}
+
+        {/* Top Gaps Summary */}
+        {isRelevantDocument && topGaps.length > 0 && (
+          <div className="bg-surface border border-border rounded-xl p-6 shadow-xl space-y-6 text-left">
+            <div className="pb-4 border-b border-border/60">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+                <span>Top Identified Compliance Gaps</span>
+              </h2>
+              <p className="text-muted text-xs mt-0.5">Key missing or incomplete ISO 27001 requirements ranked by urgency</p>
+            </div>
+
+            <div className="space-y-4">
+              {topGaps.map((gapItem, gapIdx) => (
+                <div
+                  key={gapIdx}
+                  className="bg-background/60 border border-border/60 rounded-xl p-5 space-y-2 hover:border-rose-500/40 transition"
                 >
-                  {f}
-                </button>
+                  <div className="flex items-center justify-between">
+                    <span className="text-white font-bold text-base">{gapItem.category || gapItem.categoryId}</span>
+                    <Badge variant={(gapItem.status || 'missing').toLowerCase()}>
+                      {(gapItem.status || 'MISSING').toUpperCase()}
+                    </Badge>
+                  </div>
+                  {gapItem.gap && (
+                    <p className="text-muted text-xs leading-relaxed">{gapItem.gap}</p>
+                  )}
+                  {gapItem.recommendation && (
+                    <p className="text-emerald-400 text-xs font-medium">Recommendation: {gapItem.recommendation}</p>
+                  )}
+                </div>
               ))}
             </div>
           </div>
-
-          {/* Domain List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredCategories.map((cat, idx) => (
-              <div
-                key={idx}
-                className="bg-background/60 border border-border/60 rounded-lg p-4 flex items-center justify-between hover:border-border transition"
-              >
-                <div className="space-y-1">
-                  <span className="text-white text-sm font-semibold block">{cat.name}</span>
-                  <div className="w-32 bg-surface rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${
-                        cat.status === 'Covered'
-                          ? 'bg-emerald-400'
-                          : cat.status === 'Partial'
-                          ? 'bg-amber-400'
-                          : 'bg-rose-400'
-                      }`}
-                      style={{ width: `${cat.score}%` }}
-                    ></div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs font-bold text-white">{cat.score}%</span>
-                  <Badge variant={cat.status.toLowerCase()}>{cat.status}</Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-
-        </div>
-
-        {/* Prioritized Action Plan */}
-        <div className="bg-surface border border-border rounded-xl p-6 shadow-xl space-y-6 text-left">
-          <div className="pb-4 border-b border-border/60">
-            <h2 className="text-xl font-bold text-white">Prioritized Remediation Action Plan</h2>
-            <p className="text-muted text-xs mt-0.5">Ordered by audit compliance impact and risk level</p>
-          </div>
-
-          <div className="space-y-4">
-            {actionPlan.map((action) => (
-              <div
-                key={action.id}
-                className="bg-background/60 border border-border/60 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-accent/40 transition"
-              >
-                <div className="space-y-1 max-w-2xl">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={action.priority.toLowerCase()}>{action.priority} Priority</Badge>
-                    <span className="text-muted text-xs font-mono">{action.category}</span>
-                  </div>
-                  <h3 className="text-white font-bold text-base">{action.title}</h3>
-                  <p className="text-muted text-xs">{action.impact}</p>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1.5 text-xs text-muted font-medium">
-                    <Clock className="w-4 h-4 text-accent" />
-                    <span>~{action.estimatedHours} hrs</span>
-                  </div>
-                  <Button variant="secondary" size="sm" className="flex items-center gap-1">
-                    <span>Remediate</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
 
       </div>
     </div>
   )
 }
+

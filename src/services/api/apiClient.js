@@ -3,8 +3,10 @@
  * Handles base URL configuration, request headers, error handling, and mock fallback.
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
+// Normalize Base URL: strip trailing slashes and guarantee /api path suffix
+const rawBase = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api').trim().replace(/\/+$/, '')
+const BASE_URL = rawBase.endsWith('/api') ? rawBase : `${rawBase}/api`
+const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 // Helper to simulate asynchronous network latency during mock mode
 export const simulateNetworkDelay = (ms = 600) => {
@@ -13,7 +15,8 @@ export const simulateNetworkDelay = (ms = 600) => {
 
 class ApiClient {
   constructor(baseUrl = BASE_URL) {
-    this.baseUrl = baseUrl
+    const trimmed = (baseUrl || BASE_URL).trim().replace(/\/+$/, '')
+    this.baseUrl = trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`
   }
 
   getHeaders(customHeaders = {}) {
@@ -32,7 +35,8 @@ class ApiClient {
       await simulateNetworkDelay()
     }
 
-    const url = `${this.baseUrl}${endpoint}`
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+    const url = `${this.baseUrl}${path}`
     const config = {
       ...options,
       headers: this.getHeaders(options.headers),
@@ -67,6 +71,39 @@ class ApiClient {
       headers,
       body: JSON.stringify(body),
     })
+  }
+
+  async postMultipart(endpoint, formData) {
+    if (USE_MOCK) {
+      console.log(`[API MOCK MULTIPART] POST -> ${endpoint}`)
+      await simulateNetworkDelay()
+      return null
+    }
+
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+    const url = `${this.baseUrl}${path}`
+    const token = localStorage.getItem('certup_auth_token')
+    const headers = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || `API Request failed with status ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`[API ERROR] POST MULTIPART ${url}:`, error)
+      throw error
+    }
   }
 
   put(endpoint, body, headers = {}) {
